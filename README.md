@@ -62,11 +62,6 @@ linkcolor: #e3232c
 
 - [Introduction](#introduction)
   - [Dex](#dex)
-  - [Constant Product Formula](#constant-product-formula)
-    - [Invariant](#invariant)
-  - [Token Types](#token-types)
-    - [ERC20](#erc20)
-    - [KIP7](#kip7)
   - [Factory](#factory)
   - [Pair](#pair)
   - [Token Swap](#token-swap)
@@ -79,7 +74,6 @@ linkcolor: #e3232c
   - [Core](#core)
     - [`DexFactory`](#dexfactory)
       - [Factory Contract: Functions](#factory-contract-functions)
-        - [`createPair`](#createpair)
     - [`DexPair`](#dexpair)
       - [Pair Contract: Events](#pair-contract-events)
       - [Pair Contract: Functions](#pair-contract-functions)
@@ -97,29 +91,9 @@ linkcolor: #e3232c
         - [`getAmountIn`](#getamountin)
   - [Farming and Staking](#farming-and-staking)
     - [`Farming`](#farming)
-      - [Allocation Points](#allocation-points)
-      - [Farming: PoolInfo](#farming-poolinfo)
-      - [Farming: UserInfo](#farming-userinfo)
-      - [Farming: Events](#farming-events)
-      - [Farming: Reward Debt and Pending Reward](#farming-reward-debt-and-pending-reward)
       - [Farming: Functions](#farming-functions)
-        - [Farming: `updatePool`](#farming-updatepool)
-        - [Farming: `getMultiplier`](#farming-getmultiplier)
     - [`StakingFactory`](#stakingfactory)
       - [`deployPool`](#deploypool)
-    - [`StakingInitializable`](#stakinginitializable)
-      - [Staking: PoolInfo](#staking-poolinfo)
-      - [Staking: UserInfo](#staking-userinfo)
-      - [Staking: Events](#staking-events)
-      - [Staking: Reward Debt and Pending Reward](#staking-reward-debt-and-pending-reward)
-      - [Staking: Functions](#staking-functions)
-        - [Staking: `_getMultiplier`](#staking-_getmultiplier)
-        - [Staking: `_updatePool`](#staking-_updatepool)
-- [Security Concerns](#security-concerns)
-- [Calculations](#calculations)
-- [Diagrams](#diagrams)
-  - [Type 1 Smart Contract](#type-1-smart-contract)
-  - [Type 2 Smart Contract](#type-2-smart-contract)
 
 <!-- end intro: only for github, remove if creating a pdf -->
 
@@ -347,118 +321,49 @@ Functions for sending tokens:
 
 `amountIn`과 pair reserves(`reserveIn`, `reserveOut`)이 주어지면 pair에서 최대 output을 return합니다.
 
-1. Find the input amount after the fee is calculated. Fee is 0.3%. The adjusted input value (`amountInWithFee`) can be calculated by multiplying the input amount by 997:
+1. 수수료 계산 후 입력 금액을 찾습니다. 수수료는 0.3%입니다. `amountInWithFee`은 입력 금액에 997을 곱하여 계산할 수 있습니다.
    ```
    amountIn * 997
    ```
-2. Calculate the product of `amountInWithFee` and the reserve for the other token:
+2. `amountInWithFee` 와 다른 토큰의 reserve를 계산
    ```
    amountInWithFee * reserveOut
    ```
-3. Find the sum of adjusted input value (`amountInWithFee`) and the reserve of input asset multiplied by 1000 (`reserveIn * 1000`):
+3. `amountInWithFee`와 입력 자산 reserve의 합계에 1000을 곱한 값을 구합니다.
    ```
    reserveIn * 1000 + amountInWithFee
    ```
-4. To find the output amount, divide the value calculated in step 2 by the value calculated in step 3:
+4. 출력량을 찾으려면 2단계에서 계산한 값을 3단계에서 계산한 값으로 나눕니다.
    
    ```
    (amountInWithFee * reserveOut) / (reserveIn * 1000 + amountInWithFee)
    ```
 
-This is the maximum amount of the other asset that could be given for the provided input amount.
+이 값이 제공된 입력 금액에 대해 제공할 수 있는 다른 토큰의 최대 amount입니다.
+
 
 ###### `getAmountIn`
 
-Given an output amount of an asset (`amountOut`) and pair reserves (`reserveIn`, `reserveOut`), the functions returns the required input amount of the other asset (`amountIn`).
+`amountOut`과 pair reserves (`reserveIn`, `reserveOut`)가 주어지면 다른 토큰의 필요한 입력 `amountIn`를 반환합니다.
 
-1. Find the product of the output amount (`amountOut`) and the reserve of the other asset (`reserveIn`), then multiply it by `1000`:
+1. (`amountOut`)과 다른 입력 자산의 (`reserveIn`)에  `1000`을 곱합니다.
    ```
    reserveIn * amountOut * 1000
    ```
-2. Subtract the output amount (`amountOut`) from the reserve for this asset (`reserveOut`), then the multiply the result by 997 (the fee is 0.3%):
+2.  (`reserveOut`)에서 `amountOut`을 뺀 출력 값에 997을 곱합니다
    ```
    (reserveOut - amountOut) * 997
    ```
-3. To find the required input amount, divide the value calculated in step 1 by the value calculated in step 2:
+3. 필요한 입력 amount를 찾으려면 1단계에서 계산된 값을 2단계에서 계산된 값으로 나눕니다.
    ```
    (reserveIn * amountOut * 1000) / ((reserveOut - amountOut) * 997)
    ```
 
 ### Farming and Staking
 
-Smart contracts for farming activities only support KIP7 standard tokens. Smart contracts for staking activities support both ERC20 and KIP7 standard tokens.
-
-Smart contracts for farming and staking are implemented using two different types of smart contracts. The main difference between the two is in the way the rewards are distributed across pools. 
-
-The `Farming` contract is a [Type 1 smart contract](#type-1-smart-contract). The pools in this type of contract are not independent from one another, there is a single reward pool for all the farming pools within this contract.
-
-The `Staking` contract is a [Type 2 smart contract](#type-2-smart-contract) with pools that are independant from each other in terms of reward distribution.
 
 #### `Farming`
 
-The contract that manages the farming operations with [LP tokens](#pool-tokens). To deploy the contract, the following is needed:
-
-- the address of the platform token, also called **PTN token** (`ptn`)
-- the address of the [multisignature contract](#multisignature-wallet), which will own the contract (`multisig`)
-- the number of PTN tokens created per block (`ptnPerBlock`)
-- the block at which the minting of PTN tokens starts (`startBlock`)
-
-The `Farming` contract defines two structures:
-
-- [`UserInfo`](#farming-userinfo) contains information about each user that stakes LP tokens
-- [`PoolInfo`](#farming-poolinfo) contains information about each pool
-
-##### Allocation Points
-
-The number of allocation points assigned to the farming pool is the number of platform tokens to distribute per block.
-Total number of allocation points (`totalAllocPoint`) in the farming contract is the sum of all allocation points in all farming pools.
-
-##### Farming: PoolInfo
-
-The structure contains the following information about the pool:
-
-- the address of the LP token contract (`lpToken`)
-- the bonus multiplier for the farming pool (`bonusMultiplier`)
-- the amount of LP tokens staked in the pool (`totalStaked`)
-- the last block in which the PTN tokens were distributed (`lastRewardBlock`)
-- the block after which the pool won't get any bonuses from the bonus multiplier for this farming pool (`bonusEndBlock`)
-- the accumulated PTN tokens per share multiplied by the `ACC_PRECISION` constant (`accPtnPerShare`)
-- the number of [allocation points](#allocation-points) assigned to the pool (`allocPoint`)
-
-##### Farming: UserInfo
-
-The structure contains the information about the amount of LP tokens that the user provided (`amount`) and their reward debt (`rewardDebt`).
-
-See [reward debt calculation](#farming-reward-debt-and-pending-reward).
-
-##### Farming: Events
-
-- When a new pool is added via `add`, `AddPool` is emitted with the id of the pool that was added and the following information: the number of its allocation points, the address of the token, the bonus multiplier for the farming pool, the block after which the pool won't get any bonuses.
-- When the number of PTN allocation points for a pool is updated via `set`, `SetPool` is emitted with the id of the pool and the number of its allocation points.
-- When rewards for a pool are [updated](#farming-updatepool), `UpdatePool` is emitted with the id of the pool that was updated and the following information: the last block in which PTN tokens are distributed, the number of LP tokens in the pool, and accumulated PTNs per share.
-- When LP tokens are deposited via `deposit`, `Deposit` is emitted with the information about the user that made the deposit, the amount of tokens that were deposited and the pool id.
-- When LP tokens are withdrawn via `withdraw` or `emergencyWithdraw`, `Withdraw` or `EmergencyWithdraw` is emitted with the information about the user that made the withdrawal, the amount of tokens that were withdrawn and the pool id.
-- When the reward per block is updated via `updatePtnPerBlock`, `UpdateRewardPerBlock` is emitted.
-- When the multiplier is updated for a pool via `updateMultiplier`, `UpdatePoolMultiplier` is emitted with the id of the pool for which the multiplier was updated and the new multiplier value.
-
-##### Farming: Reward Debt and Pending Reward
-
-**Pending reward** is the number of platform tokens that the user is entitled to receive but have not yet received. To find the pending reward, the `rewardDebt` is subtracted from the product of the amount of LP tokens the user provided (`amount`) and the accumulated PTN tokens per share (`accPtnPerShare`), divided by the `ACC_PRECISION` constant of the farming contract:
-
-```
-(user.amount * pool.accPtnPerShare) / ACC_PRECISION - user.rewardDebt
-```
-
-Whenever the user `deposit`s or `withdraw`s LP tokens to a pool, the following calculations happen:
-
-1. The `accPtnPerShare` and `lastRewardBlock`) values in the corresponding [pool](#farming-poolinfo) are updated using [`updatePool`](#farming-updatepool) function.
-2. The user receives the **pending reward**.
-3. The `amount` of LP tokens the user provided is updated.
-4. The total number of LP tokens in the pool (`totalStaked`) is updated.
-5. The `rewardDebt` for the user is updated. The reward debt is calculated as follows:
-   ```
-   (user.amount * pool.accPtnPerShare) / ACC_PRECISION
-   ```
 
 ##### Farming: Functions
 
@@ -466,90 +371,21 @@ Whenever the user `deposit`s or `withdraw`s LP tokens to a pool, the following c
 
 |                 Function                  |                                                                                                          Description                                                                                                           |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `add`                                     | Add a new LP farming pool. Can only be called by the [`multisig` contract](#multisignature-wallet). A new pool is added based on the address of the LP token, the number of allocation points, and the pool reward multiplier. |
-| `deposit`                                 | Deposit the specified amount of LP tokens to the specified pool. See [reward debt and pending reward calculation](#farming-reward-debt-and-pending-reward).                                                                    |
-| `withdraw`                                | Withdraw the specified amount of LP tokens from the specified pool. See [reward debt and pending reward calculation](#farming-reward-debt-and-pending-reward).                                                                 |
-| `emergencyWithdraw`                       | Withdraw LP tokens from the specified pool without receiving the reward. This is only for emergencies.                                                                                                                         |
-| `set`                                     | Update the number of PTN allocation points for the given pool. Can only be called by the [`multisig` contract](#multisignature-wallet).                                                                                        |
-| [`updatePool`](#farming-updatepool)       | Update reward variables for the given pool.                                                                                                                                                                                    |
-| `massUpdatePools`                         | Update PTN reward for all active pools. The `updatePool` function is called on all pools that are active.                                                                                                                      |
-| `updateMultiplier`                        | Update reward multiplier for the specified pool. The `bonusMultiplier` in the `PoolInfo` is updated with the provided value.                                                                                                   |
-| `updatePtnPerBlock`                       | Update the number of PTN tokens created per block.                                                                                                                                                                             |
-| [`getMultiplier`](#farming-getmultiplier) | Return the reward multiplier between two given blocks for the specified pool.                                                                                                                                                  |
-| `safePtnTransfer`                         | Safely transfer the specified amount of PTN tokens to the given address. This is needed in case the rounding error causes a pool to not have enough PTN tokens.                                                                |                                                                                                                                                             |
-
-<!-- pdf table 
-
-
----------------------------------------------------------------------------------------------------------------------------------------------
-Function                                  Description
------------------------------------------ ---------------------------------------------------------------------------------------------------
-`add`                                     Add a new LP farming pool. Can only be called by the [`multisig` contract](#multisignature-wallet).
-                                          A new pool is added based on the address of the LP token, the number of allocation points,
-                                          and the pool reward multiplier.
-
-`deposit`                                 Deposit the specified amount of LP tokens to the specified pool.
-                                          See [reward debt and pending reward calculation](#farming-reward-debt-and-pending-reward).
-
-`withdraw`                                Withdraw the specified amount of LP tokens from the specified pool.
-                                          See [reward debt and pending reward calculation](#farming-reward-debt-and-pending-reward).
-
-`emergencyWithdraw`                       Withdraw LP tokens from the specified pool without receiving the reward.
-                                          This is only for emergencies.
-
-`set`                                     Update the number of PTN allocation points for the given pool.
-                                          Can only be called by the [`multisig` contract](#multisignature-wallet).
-
-[`updatePool`](#farming-updatepool)       Update reward variables for the given pool.
-
-`massUpdatePools`                         Update PTN reward for all active pools.
-                                          The `updatePool` function is called on all pools that are active.
-
-`updateMultiplier`                        Update reward multiplier for the specified pool.
-                                          The `bonusMultiplier` in the `PoolInfo` is updated with the provided value.
-
-`updatePtnPerBlock`                       Update the number of PTN tokens created per block.
-
-[`getMultiplier`](#farming-getmultiplier) Return the reward multiplier between two given blocks for the specified pool.
-
-`safePtnTransfer`                         Safely transfer the specified amount of PTN tokens to the given address.
-                                          This is needed in case the rounding error causes a pool to not have enough PTN tokens.
----------------------------------------------------------------------------------------------------------------------------------------------
-
--->
-
-###### Farming: `updatePool`
-
-The function updates the reward variables for the given pool.
-
-1. Find the multiplier using [`getMultiplier`](#farming-getmultiplier).
-2. Calculate the pending reward:
-   - Find the product of the multiplier calculated in the previous step, the number of PTN tokens created per block (`ptnPerBlock`), and the number of allocation points in the pool (`allocPoint`).
-   - Divide the resulting value by the total number of allocation points (`totalAllocPoint`, which is the sum of all allocation points in all pools).
-3. Update the value for accumulated PTN tokens per share (`accPtnPerShare`):
-   - Find the product of pending reward and the `ACC_PRECISION` constant, then divide it by the total number of tokens staked in the pool.
-   - Add the resulting value to the current value of `accPtnPerShare`.
-
-Refer to [reward debt and pending reward](#farming-reward-debt-and-pending-reward) for more information.
-
-###### Farming: `getMultiplier`
-
-The function returns the reward multiplier for the farming pool for the given start (`_from`) and end (`_to`) blocks.
-
-The multiplier depends on whether the end block is before or after the `bonusEndBlock`:
-
-- If the end block occurs before `bonusEndBlock`, the multiplier is the product of the `bonusMultiplier` and the difference between the end block and the start block numbers (`_to - _from`).
-- If the start block occurs after `bonusEndBlock`, the multiplier is the difference between the end block and the start block numbers `(_to - _from)`.
-- In other cases, the multiplier is the sum of the following two values:
-  - the product of the the `bonusMultiplier` and the difference between `bonusEndBlock` and the start block numbers `(poolInfo[_pid].bonusEndBlock - _from)`
-  - the difference between the start block and `bonusEndBlock`
-
+| `add`                                     | 새 LP 파밍 pool을 추가합니다. LP 토큰의 주소, allocation points, 풀 보상 배율을 기반으로 새로운 풀이 추가됩니다. |
+| `deposit`                                 | 지정된 풀에 LP 토큰을 예치합니다.                                                      |
+| `withdraw`                                | 지정된 풀에서 LP토큰을 인출합니다.                                                                 |
+| `emergencyWithdraw`                       | 보상을 받지 않고 지정된 풀에서 LP 토큰을 인출합니다.                                                                                                                        |
+| `set`                                     | 지정된 풀에서 JDEXT allocation points를 업데이트합니다.                                                                                        |
+| [`updatePool`](#farming-updatepool)       | 주어진 풀에 대한 보상 변수를 업데이트합니다.                                                                                                                                                                                    |
+| `massUpdatePools`                         | 모든활성 풀에대한 JDEXT 보상을 업데이트 합니다.                                                                                                                      |
+| `updateMultiplier`                        | 지정된 풀에 대한 보상 multiplier을 업데이트합니다.                                                                                                  |
+| `updatePtnPerBlock`                       | 블록당 생성된 JDEXT 토큰 수를 업데이트 합니다                                                                                                                                |
+| [`getMultiplier`](#farming-getmultiplier) | 지정된 풀에대해 주어진 두 블록 사이의 multiplier를 return합니다.                                 |
+| `safePtnTransfer`                         | 지정된 양의 JDEXT를 지정된 address로 transfer합니다.                                    |                                                                                                                                                             |
 
 #### `StakingFactory`
 
-Long-term staking allows users to stake the Dex token and earn other tokens as rewards.
-
-The contract deploys a new staking pool contract using [`deployPool`](#deploypool). The created contract is owned by the [`multisig` contract](#multisignature-wallet).
+스테이킹을 통해 사용자는 만들어진 풀에 대한 토큰을 스테이킹하고 JDEX토큰을 보상으로 얻을 수 있습니다.
 
 ##### `deployPool`
 
@@ -565,146 +401,21 @@ The contract for the new staking pool is deployed using `StakingInitializable` c
 
 The function returns the address of a new staking pool contract.
 
-#### `StakingInitializable`
-
-The staking factory contract (`StakingFactory`) deploys the `StakingInitializable` contract when a new staking pool is deployed. This contract initializes a new pool.
-
-The contract defines two structures: 
-- [`UserInfo`](#staking-userinfo) contains information about each user that stakes tokens
-- [`PoolInfo`](#staking-poolinfo) contains information about each staking pool
-
-##### Staking: PoolInfo
-
-The structure contain the following information about the pool:
-
-- whether the pool is initialized 
-- the addresses of the staked and reward tokens
-- the blocks at which PTN minting starts and ends
-- the last block in which the pool was updated
-- whether there is a limit set for users
-- the max number of blocks available for each user after the start block
-- the pool limit (in staked token) per user
-- the accrued token per share
-- the amount of PTN tokens created per block
-- the total amount of staked tokens
-
-##### Staking: UserInfo
-
-The structure contains the information about the amount of staked tokens that the user provided (`amount`) and their reward debt (`rewardDebt`).
-
-##### Staking: Events
-
-- `Deposit` with the information about the user that made the deposit and the deposited amount
-- `Withdraw` and `EmergencyWithdraw` with the information about the user that made the withdrawal and the withdrawn amount
-- `UpdatePool` with the information about the block that was last updated, the accrued token per share, and the total amount of staked tokens
-- `NewStartAndEndBlocks` with the blocks at which PTN minting starts and ends
-- `NewRewardPerBlock` with the amount of PTN tokens created per block
-- `NewPoolLimit` with the the information about pool limit
-- `RewardsStop` with the block at which to stop rewards
-- `TokenRecovery` with the information about the user that received recovered tokens and the amount of tokens recovered
-
-##### Staking: Reward Debt and Pending Reward
-
-**Pending reward** is the number of reward tokens that the user is entitled to receive but have not yet received. To find the pending reward, the `rewardDebt` is subtracted from the product of the amount tokens staked by the user and the accrued token per share for the given pool (`accTokenPerShare`), divided by the `PRECISION_FACTOR` constant of the staking contract:
-
-```
-(user.amount * pool.accTokenPerShare) / PRECISION_FACTOR - user.rewardDebt
-```
-
-Whenever the user `deposit`s or `withdraw`s staked tokens to a pool, the following calculations happen:
-
-1. The `accTokenPerShare` and `lastRewardBlock` values in the corresponding [pool](#staking-poolinfo) are updated using [`_updatePool`](#staking-_updatepool).
-2. The user receives the **pending reward**.
-3. The `amount` of staked tokens the user provided is updated.
-4. The total number of staked tokens in the pool (`totalStaked`) is updated.
-5. The `rewardDebt` for the user is updated. The reward debt is calculated as follows:
-   ```
-   (user.amount * pool.accTokenPerShare) / PRECISION_FACTOR
-   ```
 
 ##### Staking: Functions
 
 |                  Function                   |                                                    Description                                                     |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `initialize`                                | Initialize the staking contract. The contract is owned by the [multisig contract](#multisignature-wallet).         |
-| `deposit`                                   | Deposit staked tokens and collect reward tokens (if any).                                                          |
-| `withdraw`                                  | Withdraw staked tokens and collect reward tokens (if any).                                                         |
-| `recoverToken`                              | Recover tokens sent to the contract by mistake. Can only be called by [multisig contract](#multisignature-wallet). |
-| `updatePoolLimitPerUser`                    | Update pool limit per user. Can only be called by [multisig contract](#multisignature-wallet).                     |
-| `updateRewardPerBlock`                      | Update reward per block. Can only be called by [multisig contract](#multisignature-wallet).                        |
-| `updateStartAndEndBlocks`                   | Update the start and end blocks. Can only be called by [multisig contract](#multisignature-wallet).                |
-| [`_updatePool`](#staking-_updatepool)       | Update reward variables for the given pool.                                                                        |
-| [`_getMultiplier`](#staking-_getmultiplier) | Return reward multiplier between two given blocks for the specified pool.                                          |
-| `hasUserLimit`                              | Check if the user limit is set. (?)                                                                                |
-
-For emergency situations:
-
-<!-- github table -->
-
-|         Function          |                                                     Description                                                     |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `emergencyWithdraw`       | Withdraw staked tokens without receiving any rewards.                                                               |
-| `emergencyRewardWithdraw` | Transfer reward tokens to the specified address. Can only be called by [multisig contract](#multisignature-wallet). |
-| `stopReward`              | Stop pool rewards. Can only be called by [multisig contract](#multisignature-wallet).                               |
+| `initialize`                                | 스테이킹 contract를 초기화합니다.        |
+| `deposit`                                   | 스테이킹된 토큰을 예치하고 보상 토큰이 있는 경우 받습니다. |
+| `withdraw`                                  | 스테킹된 토큰을 인출하고 보상 토큰이 있는 경우 받습니다.|
+| `recoverToken`                              | 실수로 컨트랙트로 보낸 토큰을 복구합니다. |
+| `updatePoolLimitPerUser`                    | 사용자당 풀 제한을 업데이트 합니다.            |
+| `updateRewardPerBlock`                      | 블록당 보상을 업데이트합니다. |
+| `updateStartAndEndBlocks`                   | 시작 및 종료 블록을 업데이트 합니다.  |
+| [`_updatePool`](#staking-_updatepool)       | 주어진 풀에 대한 보상 변수를 업데이트합니다. |
+| [`_getMultiplier`](#staking-_getmultiplier) | 지정된 풀에 대해 주어진 두 블록 사이의 보상 multiplier를 return 합니다   |
+| `hasUserLimit`                              | user limit이 있는지 확인합니다 |
 
 
-
-<!-- pdf table
-
----------------------------------------------------------------------------------------------------------------------
-Function                   Description
--------------------------  ------------------------------------------------------------------------------------------
-`emergencyWithdraw`        Withdraw staked tokens without receiving any rewards.  
-
-`emergencyRewardWithdraw`  Transfer reward tokens to the specified address.
-                           Can only be called by [multisig contract](#multisignature-wallet).
-
-`stopReward`               Stop pool rewards. Can only be called by [multisig contract](#multisignature-wallet).
----------------------------------------------------------------------------------------------------------------------
-
--->
-
-###### Staking: `_getMultiplier`
-
-The functions returns the reward multiplier for the given start (`_from`) and end (`_to`) blocks.
-
-The multiplier depends on the relation between the `rewardEndBlock` (the block at which PTN minting ends) and `_from`/`_to` blocks:
-
-- If the `_to` occurs before `rewardEndBlock`, the multiplier is the difference between the end and the start block numbers (`_to - _from`).
-- If the `_from` occurs after `rewardEndBlock`, the multiplier is `0` (rewards are no longer updated).
-- In other cases, the multiplier is the difference between the `rewardEndBlock` and the start block numbers (`rewardEndBlock - _from`).
-
-
-###### Staking: `_updatePool`
-
-The function updates the reward variables for the given pool. If the current block number is higher than `rewardEndBlock` (the block at which PTN minting ends), the pool rewards are no longer updated.
-
-1. Find the multiplier using [`_getMultiplier`](#staking-_getmultiplier).
-2. Calculate the pending reward as the product of the multiplier calculated in the previous step and the reward per block (`rewardPerBlock`).
-3. Update the value for accrued token per share (`accTokenPerShare`):
-   
-   - Find the product of pending reward and the `PRECISION_FACTOR` constant, then divide it by the total amount of staked tokens in the pool.
-   - Add the resulting value to the current value of `accTokenPerShare`.
-
-Refer to [reward debt and pending reward](#staking-reward-debt-and-pending-reward) for more information.
-
-
-
-## Security Concerns
-
-As mentioned above, there is no tokenomics defined in Dex protocol. Each instance of Dex would need to define and implement its own model, which might mean reworking or completely rewriting the smart contracts.
-
-Reserves and balances should match. In case they do not (e.g. when adding tokens via transfers from outside of DEX platform), there are recovery mechanisms to force reserves and balances to match. These recovery mechanisms are `sync` and `skim` functions defined in [`DexPair` contract](#dexpair).
-
-A lot of functionality on DEX platform is owned and controlled via [`multisig` contract](#multisignature-wallet). This contract is a multisignature wallet that allows multiple parties to agree on transactions before they are executed. However, it is still a single contract controlling other functionality, which means it poses security risks associated with the certain degree of system centralization.
-
-DEX platform has emergency withdraw operations in place to fetch all rewards from a staking pool: `emergencyWithdraw` in both [staking](#stakinginitializable) and [farming](#farming) contracts, and `emergencyRewardWithdraw` in the [staking](#stakinginitializable) contract. The `emergencyRewardWithdraw` is controlled by the [`multisig` contract](#multisignature-wallet).
-
-There are also security concerns common with other decentralized systems. These are intentional attacks such as:
-
-- Sandwich attacks (front-running attack)
-- Scam tokens
-- Phishing attacks with similarly looking domains
-- Pump-and-dump scam
-- Arbitrage attacks
 
