@@ -520,32 +520,7 @@ Functions for sending tokens:
 
 ## 📋 DB Api
 
-| EndPoint | Description | METHOD | Parameters | res |
-| --- | --- | --- | --- | --- |
-| /mytoken | 모든 토큰 정보 | GET | X | token_address, 
-token_name,
-token_symbol |
-| staking/singlepool | 단일 풀 정보 | GET | X | token_address, 
-token_name,
-token_symbol |
-| staking/klaypool | Klay-KIP7 풀 정보 | GET | X | pair_address,    
-pair_name,    
-token_address,
-pid |
-| staking/kip7pool | KIP7-KIP7 풀 정보 | GET | X | pair_address,
-pair_name,
-tokenA_address,    
-tokenB_address,
-pid |
-| staking/create_klaypool | Klay-KIP7 pair 생성 | POST | token_address,
-token_amount | X |
-| staking/create_kip7pool | KIP7-KIP7 pair 생성 | POST | tokenA_address,
-tokenA_amount,
-tokenB_address,
-tokenB_amount | X |
-| staking/create_singlepool | 단일 풀 생성 | POST | token_address,
-token_name,
-token_symbol | X |
+<img width="698" alt="API_List" src="https://user-images.githubusercontent.com/99964401/193607217-00f60802-4ffd-4333-aab8-c87d9f1a4042.png">
 
 <br/>
 
